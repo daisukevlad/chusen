@@ -223,9 +223,11 @@ function createCampaignElement(campaign, entryCount, isAdminView, userEntryStatu
                 <button class="btn btn-primary btn-draw" data-campaign-id="${campaign.id}" ${campaign.drawn ? 'disabled' : ''}>
                     ${campaign.drawn ? '抽選済み' : '抽選を実行'}
                 </button>
-                <button class="btn btn-secondary btn-view-entries" data-campaign-id="${campaign.id}">
-                    結果・応募者
-                </button>
+                ${campaign.drawn ? `
+                    <button class="btn btn-secondary btn-view-entries" data-campaign-id="${campaign.id}">
+                        結果・応募者
+                    </button>
+                ` : ''}
             </div>
         `;
     } else {
