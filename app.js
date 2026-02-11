@@ -100,14 +100,17 @@ document.getElementById('googleLoginBtn').addEventListener('click', async () => 
         document.getElementById('userInfo').style.display = 'flex';
 
         showToast('ログインしました', 'success');
-        await loadCampaigns();
+
+        // Switch screen immediately for better UX
+        showScreen('campaignScreen');
 
         // Show admin button if user is admin
         if (isAdmin(currentUser.email)) {
             document.getElementById('createCampaignBtn').style.display = 'block';
         }
 
-        showScreen('campaignScreen');
+        // Load data in background
+        loadCampaigns();
     } catch (error) {
         console.error('Login error:', error);
         showToast('ログインに失敗しました: ' + error.message, 'error');
@@ -594,8 +597,8 @@ document.addEventListener('DOMContentLoaded', () => {
 onAuthStateChanged(auth, async (user) => {
     if (user) {
         currentUser = user;
-        document.getElementById('userPhoto').src = user.photoURL;
-        document.getElementById('userName').textContent = user.displayName;
+        document.getElementById('userPhoto').src = user.photoURL || '';
+        document.getElementById('userName').textContent = user.displayName || '';
         document.getElementById('userInfo').style.display = 'flex';
 
         // Show admin button if user is admin
@@ -603,12 +606,15 @@ onAuthStateChanged(auth, async (user) => {
             document.getElementById('createCampaignBtn').style.display = 'block';
         }
 
-        // Load campaigns and show campaign screen
-        await loadCampaigns();
+        // Always switch to campaign screen if logged in
         showScreen('campaignScreen');
+
+        // Load campaigns in background
+        loadCampaigns();
     } else {
         currentUser = null;
         document.getElementById('userInfo').style.display = 'none';
+        document.getElementById('createCampaignBtn').style.display = 'none';
         showScreen('loginScreen');
     }
 });
