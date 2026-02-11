@@ -236,7 +236,7 @@ function createCampaignElement(campaign, entryCount, isAdminView, userEntryStatu
         let btnClass = 'btn-primary';
 
         if (userEntryStatus === 'winner') {
-            btnText = '🎊 当選しました！';
+            btnText = '当選しました！連絡をお待ちください！';
             btnDisabled = 'disabled';
             btnClass = 'btn-secondary'; // 別の色に
         } else if (userEntryStatus === 'lost') {
