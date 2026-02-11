@@ -2,24 +2,43 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // 管理者かどうかを判別する関数
+    // 基本的な認証チェック
+    function isAuthenticated() { return request.auth != null; }
+    
+    // 管理者かどうかをメールアドレスで判別
     function isAdmin() {
-      return request.auth != null && request.auth.token.email == 'largeintro@gmail.com';
+      return isAuthenticated() && request.auth.token.email in ['largeintro@gmail.com'];
+    }
+    
+    // データの所有者かどうかをUIDで判別
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
     }
 
     match /campaigns/{campaignId} {
-      // 企画一覧と詳細は誰でも読み取り可能
-      allow read: if true;
+      // 企画の基本情報はログインしていれば閲覧可能（URLアクセス用）
+      allow read: if isAuthenticated();
       
       // 作成と削除は管理者のみ
       allow create, delete: if isAdmin();
       
-      // 応募（entryCountの更新）はログインユーザーなら許可
-      allow update: if isAdmin() || (request.auth != null);
+      // ユーザーは応募時に entryCount (応募数) だけを +1 更新することを許可
+      // 管理者はすべての更新が可能
+      allow update: if isAdmin() || (isAuthenticated() && 
+                    request.resource.data.diff(resource.data).affectedKeys().hasOnly(['entryCount']));
 
       match /entries/{entryId} {
-        // 自分のデータ（IDが一致するデータ）か、管理者だけが読み書きできる
-        allow read, write: if isAdmin() || (request.auth != null && entryId == request.auth.uid);
+        // 管理者は全件読み取り可能、ユーザーは自分のデータのみ
+        allow read: if isAdmin() || (isAuthenticated() && entryId == request.auth.uid);
+        
+        // 応募：自分のUIDをドキュメントIDとして作成する場合のみ許可
+        allow create: if isAuthenticated() && entryId == request.auth.uid;
+        
+        // 更新：管理者の抽選処理（isWinnerの更新）のみ許可
+        allow update: if isAdmin();
+        
+        // 【重要】削除：管理者が抽選後に落選データを消すために設定
+        allow delete: if isAdmin();
       }
     }
   }

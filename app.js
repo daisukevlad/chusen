@@ -148,7 +148,8 @@ document.getElementById('retryLoginBtn').addEventListener('click', () => {
 // ===========================
 
 async function handleNavigationAfterLogin() {
-    const campaignId = getCampaignIdFromUrl();
+    const campaignId = getCampaignIdFromUrl()?.trim();
+    console.log('Detected Campaign ID:', campaignId);
 
     if (campaignId) {
         // Load specific campaign
@@ -158,7 +159,8 @@ async function handleNavigationAfterLogin() {
             const campaignSnap = await getDoc(campaignRef);
 
             if (!campaignSnap.exists()) {
-                showError('指定された抽選企画が見つかりませんでした。URLが正しいか確認してください。');
+                console.error('Campaign not found in Firestore for ID:', campaignId);
+                showError(`指定された抽選企画が見つかりませんでした (ID: ${campaignId})。URLが正しいか確認してください。`);
                 return;
             }
 
@@ -250,8 +252,9 @@ function createAdminCampaignElement(campaign, entryCount) {
     const statusText = campaign.drawn ? '抽選済み' : '募集中';
     const statusColor = campaign.drawn ? '#999' : '#06FFA5';
 
-    // Generate campaign URL
-    const campaignUrl = `${window.location.origin}${window.location.pathname}?id=${campaign.id}`;
+    // Generate campaign URL (more robustly handling local files and different origins)
+    const baseUrl = window.location.href.split('?')[0].split('#')[0];
+    const campaignUrl = `${baseUrl}?id=${campaign.id}`;
 
     div.innerHTML = `
         <h3>${campaign.name}</h3>
