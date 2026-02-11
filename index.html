@@ -102,10 +102,12 @@
                         </div>
 
                         <div class="form-group">
-                            <label for="postalCode">郵便番号 *</label>
+                            <label for="postalCode">郵便番号 * <span id="postalCodeLoading"
+                                    style="display: none; color: var(--primary-purple); font-size: 0.9em;">🔍
+                                    検索中...</span></label>
                             <input type="text" id="postalCode" class="input" placeholder="1234567" pattern="[0-9]{7}"
                                 required>
-                            <small>ハイフンなしで入力してください</small>
+                            <small>ハイフンなしで入力してください（7桁入力で自動検索）</small>
                         </div>
 
                         <div class="form-group">
