@@ -2,21 +2,26 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    function isAuthenticated() { return request.auth != null; }
+    // 管理者かどうかを判別する関数
     function isAdmin() {
-      return isAuthenticated() && request.auth.token.email in ['largeintro@gmail.com'];
+      return request.auth != null && request.auth.token.email == 'largeintro@gmail.com';
     }
 
     match /campaigns/{campaignId} {
+      // 企画は誰でも見れる
       allow read: if true;
+      
+      // 作成と削除は管理者のみ
       allow create, delete: if isAdmin();
       
-      // 応募者数の更新 (+1) を許可
-      allow update: if isAdmin() || (isAuthenticated() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['entryCount']));
+      // 企画の更新：管理者は自由、ユーザーは「entryCount（応募数）」のみ更新可能
+      allow update: if isAdmin() || 
+                    (request.auth != null && 
+                     request.resource.data.diff(resource.data).affectedKeys().hasOnly(['entryCount']));
 
       match /entries/{entryId} {
-        // 自分のIDの名前のデータなら読み書き自由（他人のデータは見れない）
-        allow read, write: if isAdmin() || (isAuthenticated() && entryId == request.auth.uid);
+        // 自分のデータ（IDが一致するデータ）か、管理者だけが読み書きできる
+        allow read, write: if isAdmin() || (request.auth != null && entryId == request.auth.uid);
       }
     }
   }
