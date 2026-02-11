@@ -134,7 +134,12 @@ document.getElementById('logoutBtn').addEventListener('click', async () => {
 // Campaign Management
 // ===========================
 
+let isLoadingCampaigns = false;
+
 async function loadCampaigns() {
+    if (isLoadingCampaigns) return;
+    isLoadingCampaigns = true;
+
     showLoading();
     try {
         const campaignsRef = collection(db, 'campaigns');
@@ -144,13 +149,18 @@ async function loadCampaigns() {
         const campaignList = document.getElementById('campaignList');
         const adminCampaignList = document.getElementById('adminCampaignList');
 
+        // Clear lists
         campaignList.innerHTML = '';
         adminCampaignList.innerHTML = '';
 
         if (snapshot.empty) {
             campaignList.innerHTML = '<p style="text-align: center; color: #666;">現在、実施中の企画はありません</p>';
+            isLoadingCampaigns = false;
             return;
         }
+
+        const userFrag = document.createDocumentFragment();
+        const adminFrag = document.createDocumentFragment();
 
         for (const docSnap of snapshot.docs) {
             const campaign = docSnap.data();
@@ -163,19 +173,24 @@ async function loadCampaigns() {
 
             // User view
             const campaignDiv = createCampaignElement(campaign, entryCount, false);
-            campaignList.appendChild(campaignDiv);
+            userFrag.appendChild(campaignDiv);
 
             // Admin view
-            if (isAdmin(currentUser.email)) {
+            if (currentUser && isAdmin(currentUser.email)) {
                 const adminCampaignDiv = createCampaignElement(campaign, entryCount, true);
-                adminCampaignList.appendChild(adminCampaignDiv);
+                adminFrag.appendChild(adminCampaignDiv);
             }
         }
+
+        campaignList.appendChild(userFrag);
+        adminCampaignList.appendChild(adminFrag);
+
     } catch (error) {
         console.error('Load campaigns error:', error);
         showToast('企画の読み込みに失敗しました', 'error');
     } finally {
         showLoading(false);
+        isLoadingCampaigns = false;
     }
 }
 
