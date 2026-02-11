@@ -8,21 +8,21 @@
     --primary-blue: #4CC9F0;
     --primary-yellow: #FFD60A;
     --primary-green: #06FFA5;
-    
+
     --gradient-1: linear-gradient(135deg, #FF69B4 0%, #9D4EDD 100%);
     --gradient-2: linear-gradient(135deg, #4CC9F0 0%, #9D4EDD 100%);
     --gradient-3: linear-gradient(135deg, #FFD60A 0%, #FF69B4 100%);
     --gradient-4: linear-gradient(135deg, #06FFA5 0%, #4CC9F0 100%);
-    
+
     --bg-dark: #1a0a2e;
     --bg-card: rgba(255, 255, 255, 0.95);
     --text-dark: #2d1b4e;
     --text-light: #ffffff;
-    
+
     --shadow-sm: 0 2px 10px rgba(157, 78, 221, 0.1);
     --shadow-md: 0 8px 30px rgba(157, 78, 221, 0.2);
     --shadow-lg: 0 15px 50px rgba(157, 78, 221, 0.3);
-    
+
     --border-radius: 20px;
     --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -112,15 +112,20 @@ body {
 }
 
 @keyframes float {
-    0%, 100% {
+
+    0%,
+    100% {
         transform: translate(0, 0) scale(1);
     }
+
     25% {
         transform: translate(50px, -50px) scale(1.1);
     }
+
     50% {
         transform: translate(-30px, 30px) scale(0.9);
     }
+
     75% {
         transform: translate(40px, 60px) scale(1.05);
     }
@@ -161,9 +166,12 @@ body {
 }
 
 @keyframes pulse {
-    0%, 100% {
+
+    0%,
+    100% {
         transform: scale(1);
     }
+
     50% {
         transform: scale(1.05);
     }
@@ -208,6 +216,7 @@ body {
         opacity: 0;
         transform: translateY(30px);
     }
+
     to {
         opacity: 1;
         transform: translateY(0);
@@ -376,6 +385,12 @@ body {
     color: #999;
 }
 
+.input:read-only {
+    background: rgba(157, 78, 221, 0.08);
+    cursor: not-allowed;
+    color: #666;
+}
+
 small {
     display: block;
     margin-top: 5px;
@@ -491,9 +506,12 @@ small {
 }
 
 @keyframes bounce {
-    0%, 100% {
+
+    0%,
+    100% {
         transform: translateY(0);
     }
+
     50% {
         transform: translateY(-20px);
     }
@@ -606,53 +624,53 @@ small {
     .container {
         padding: 15px;
     }
-    
+
     .header {
         flex-direction: column;
         gap: 15px;
         text-align: center;
     }
-    
+
     .logo {
         font-size: 1.5rem;
     }
-    
+
     .card-header h2 {
         font-size: 1.5rem;
     }
-    
+
     .card-body {
         padding: 20px;
     }
-    
+
     .btn {
         padding: 12px 24px;
         font-size: 0.95rem;
     }
-    
+
     .btn-large {
         padding: 15px 30px;
         font-size: 1.1rem;
     }
-    
+
     .campaign-item h3 {
         font-size: 1.2rem;
     }
-    
+
     .campaign-actions {
         flex-direction: column;
     }
-    
+
     .campaign-actions .btn {
         width: 100%;
     }
-    
+
     .toast {
         right: 15px;
         left: 15px;
         bottom: 15px;
     }
-    
+
     .bubble {
         opacity: 0.3;
     }
@@ -662,25 +680,25 @@ small {
     .logo {
         font-size: 1.3rem;
     }
-    
+
     .card-header {
         padding: 20px;
     }
-    
+
     .card-header h2 {
         font-size: 1.3rem;
     }
-    
+
     .user-info {
         padding: 8px 15px;
         gap: 10px;
     }
-    
+
     .user-photo {
         width: 35px;
         height: 35px;
     }
-    
+
     .user-name {
         font-size: 0.9rem;
     }
@@ -690,6 +708,7 @@ small {
    Accessibility
    =========================== */
 @media (prefers-reduced-motion: reduce) {
+
     *,
     *::before,
     *::after {

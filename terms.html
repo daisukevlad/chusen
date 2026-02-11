@@ -15,17 +15,25 @@
     <style>
         .terms-container {
             position: relative;
-            z-index: 10;
+            z-index: 999;
             max-width: 900px;
             margin: 0 auto;
             padding: 40px 20px;
         }
 
         .terms-card {
+            background: white;
+            /* 予備の白 */
             background: var(--bg-card);
             border-radius: var(--border-radius);
             padding: 40px;
             box-shadow: var(--shadow-lg);
+            position: relative;
+            z-index: 1000;
+        }
+
+        .bg-animation {
+            z-index: -1 !important;
         }
 
         .terms-card h1 {
