@@ -28,6 +28,8 @@ import {
     where,
     doc,
     updateDoc,
+    setDoc,
+    getDoc,
     serverTimestamp,
     orderBy,
     increment
@@ -352,19 +354,14 @@ document.getElementById('entryForm').addEventListener('submit', async (e) => {
         return;
     }
 
-    const phoneNumber = document.getElementById('phoneNumber').value.trim();
-
-    // Validate phone number format
-    if (!phoneNumber.match(/^0\d{9,10}$/)) {
-        showToast('正しい電話番号を入力してください（ハイフンなし、10-11桁）', 'error');
-        return;
-    }
+    // Normalize phone number (remove hyphens, spaces, etc.)
+    const normalizedPhone = phoneNumber.replace(/\D/g, '');
 
     const formData = {
         userId: currentUser.uid,
         email: document.getElementById('email').value.trim(),
         fullName: document.getElementById('fullName').value.trim(),
-        phoneNumber: phoneNumber,
+        phoneNumber: normalizedPhone, // Store normalized number
         postalCode: document.getElementById('postalCode').value.trim(),
         address: document.getElementById('address').value.trim(),
         building: document.getElementById('building').value.trim(),
@@ -374,9 +371,19 @@ document.getElementById('entryForm').addEventListener('submit', async (e) => {
 
     showLoading();
     try {
+        const entryDocRef = doc(db, 'campaigns', currentCampaign.id, 'entries', currentUser.uid);
+
+        // 1. Check if this UID already has an entry (fast & direct)
+        const existingEntryDoc = await getDoc(entryDocRef);
+        if (existingEntryDoc.exists()) {
+            showToast('このアカウントで既に応募済みです', 'error');
+            showLoading(false);
+            return;
+        }
+
         const entriesRef = collection(db, 'campaigns', currentCampaign.id, 'entries');
 
-        // Check phone number duplicate
+        // 2. Check phone number duplicate (normalized)
         const phoneQuery = query(entriesRef, where('phoneNumber', '==', formData.phoneNumber));
         const phoneSnapshot = await getDocs(phoneQuery);
 
@@ -386,7 +393,7 @@ document.getElementById('entryForm').addEventListener('submit', async (e) => {
             return;
         }
 
-        // Check address duplicate
+        // 3. Check address duplicate
         const addressQuery = query(
             entriesRef,
             where('postalCode', '==', formData.postalCode),
@@ -400,8 +407,8 @@ document.getElementById('entryForm').addEventListener('submit', async (e) => {
             return;
         }
 
-        // Add entry
-        await addDoc(entriesRef, formData);
+        // Add entry using UID as Document ID to guarantee uniqueness per campaign
+        await setDoc(entryDocRef, formData);
 
         // Increment entry count on campaign document securely
         const campaignRef = doc(db, 'campaigns', currentCampaign.id);
@@ -544,41 +551,32 @@ async function viewEntries(campaign) {
             return;
         }
 
-        // データをJSの配列として取得し、ソートする
+        // データをJSの配列として取得
         const entries = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        const applicantsCount = entries.length;
 
-        // 当選者を上に、次に名前順で並び替え
-        entries.sort((a, b) => {
-            if (a.isWinner === b.isWinner) {
-                return a.fullName.localeCompare(b.fullName);
-            }
-            return a.isWinner ? -1 : 1;
-        });
+        // 当選者のみを抽出して名前順にソート
+        const winners = entries.filter(e => e.isWinner)
+            .sort((a, b) => a.fullName.localeCompare(b.fullName));
 
-        let resultMessage = `【${campaign.name}】抽選結果・応募者リスト\n`;
+        let resultMessage = `【${campaign.name}】当選者リスト\n`;
         resultMessage += `------------------------------------\n\n`;
 
-        let winnerCount = 0;
         let entriesInfo = "";
 
-        entries.forEach((entry) => {
-            const statusIcon = entry.isWinner ? '🎊 【当選】' : '▫️【落選】';
-
-            entriesInfo += `${statusIcon} ${entry.fullName}\n`;
-
-            // 当選者のみ個人情報を表示
-            if (entry.isWinner) {
-                winnerCount++;
+        if (winners.length === 0) {
+            entriesInfo = "（当選者はまだいません。抽選を実行してください）\n";
+        } else {
+            winners.forEach((entry) => {
+                entriesInfo += `🎊 【当選】 ${entry.fullName}\n`;
                 entriesInfo += `   📧: ${entry.email}\n`;
                 entriesInfo += `   📞: ${entry.phoneNumber}\n`;
                 entriesInfo += `   🏠: 〒${entry.postalCode} ${entry.address} ${entry.building || ''}\n`;
-            } else {
-                entriesInfo += `   (落選者の個人情報は非表示です)\n`;
-            }
-            entriesInfo += `------------------------------------\n`;
-        });
+                entriesInfo += `------------------------------------\n`;
+            });
+        }
 
-        const finalHeader = `総応募数: ${entries.length}名 / 当選確定: ${winnerCount}名\n\n`;
+        const finalHeader = `総応募数: ${applicantsCount}名 / 当選者: ${winners.length}名\n\n`;
         alert(finalHeader + resultMessage + entriesInfo);
 
     } catch (error) {
