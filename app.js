@@ -526,8 +526,8 @@ async function viewEntries(campaign) {
     showLoading();
     try {
         const entriesRef = collection(db, 'campaigns', campaign.id, 'entries');
-        const q = query(entriesRef, orderBy('isWinner', 'desc'), orderBy('fullName', 'asc')); // 当選者を上に
-        const snapshot = await getDocs(q);
+        // インデックスエラー回避のため、クエリでは並べ替えず、全件取得後にJSでソートする
+        const snapshot = await getDocs(entriesRef);
 
         if (snapshot.empty) {
             alert('応募者がまだいません');
@@ -535,14 +535,24 @@ async function viewEntries(campaign) {
             return;
         }
 
+        // データをJSの配列として取得し、ソートする
+        const entries = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+        // 当選者を上に、次に名前順で並び替え
+        entries.sort((a, b) => {
+            if (a.isWinner === b.isWinner) {
+                return a.fullName.localeCompare(b.fullName);
+            }
+            return a.isWinner ? -1 : 1;
+        });
+
         let resultMessage = `【${campaign.name}】抽選結果・応募者リスト\n`;
         resultMessage += `------------------------------------\n\n`;
 
         let winnerCount = 0;
         let entriesInfo = "";
 
-        snapshot.docs.forEach((doc, index) => {
-            const entry = doc.data();
+        entries.forEach((entry) => {
             const statusIcon = entry.isWinner ? '🎊 【当選】' : '▫️【落選】';
 
             entriesInfo += `${statusIcon} ${entry.fullName}\n`;
@@ -559,7 +569,7 @@ async function viewEntries(campaign) {
             entriesInfo += `------------------------------------\n`;
         });
 
-        const finalHeader = `総応募数: ${snapshot.size}名 / 当選確定: ${winnerCount}名\n\n`;
+        const finalHeader = `総応募数: ${entries.length}名 / 当選確定: ${winnerCount}名\n\n`;
         alert(finalHeader + resultMessage + entriesInfo);
 
     } catch (error) {
