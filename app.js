@@ -30,6 +30,7 @@ import {
     updateDoc,
     setDoc,
     getDoc,
+    deleteDoc,
     serverTimestamp,
     orderBy,
     increment
@@ -79,7 +80,17 @@ function showScreen(screenId) {
 }
 
 function isAdmin(email) {
-    return ADMIN_EMAILS.includes(email);
+    return email && ADMIN_EMAILS.includes(email);
+}
+
+function getCampaignIdFromUrl() {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('id');
+}
+
+function showError(message) {
+    document.getElementById('errorMessage').textContent = message;
+    showScreen('errorScreen');
 }
 
 // ===========================
@@ -95,22 +106,13 @@ document.getElementById('googleLoginBtn').addEventListener('click', async () => 
         currentUser = result.user;
 
         // Update UI
-        document.getElementById('userPhoto').src = currentUser.photoURL;
-        document.getElementById('userName').textContent = currentUser.displayName;
+        document.getElementById('userPhoto').src = currentUser.photoURL || '';
+        document.getElementById('userName').textContent = currentUser.displayName || '';
         document.getElementById('userInfo').style.display = 'flex';
 
         showToast('ログインしました', 'success');
 
-        // Switch screen immediately for better UX
-        showScreen('campaignScreen');
-
-        // Show admin button if user is admin
-        if (isAdmin(currentUser.email)) {
-            document.getElementById('createCampaignBtn').style.display = 'block';
-        }
-
-        // Load data in background
-        loadCampaigns();
+        handleNavigationAfterLogin();
     } catch (error) {
         console.error('Login error:', error);
         showToast('ログインに失敗しました: ' + error.message, 'error');
@@ -120,7 +122,7 @@ document.getElementById('googleLoginBtn').addEventListener('click', async () => 
 });
 
 // Logout
-document.getElementById('logoutBtn').addEventListener('click', async () => {
+async function handleLogout() {
     try {
         await signOut(auth);
         currentUser = null;
@@ -131,180 +133,175 @@ document.getElementById('logoutBtn').addEventListener('click', async () => {
         console.error('Logout error:', error);
         showToast('ログアウトに失敗しました', 'error');
     }
+}
+
+document.getElementById('logoutBtn').addEventListener('click', handleLogout);
+if (document.getElementById('backToLogin')) {
+    document.getElementById('backToLogin').addEventListener('click', handleLogout);
+}
+document.getElementById('retryLoginBtn').addEventListener('click', () => {
+    showScreen('loginScreen');
 });
 
-// Phone number verification removed - now handled in entry form
-
-
 // ===========================
-// Campaign Management
+// Navigation Logic
 // ===========================
 
-let isLoadingCampaigns = false;
+async function handleNavigationAfterLogin() {
+    const campaignId = getCampaignIdFromUrl();
 
-async function loadCampaigns() {
-    if (isLoadingCampaigns) return;
-    isLoadingCampaigns = true;
+    if (campaignId) {
+        // Load specific campaign
+        showLoading();
+        try {
+            const campaignRef = doc(db, 'campaigns', campaignId);
+            const campaignSnap = await getDoc(campaignRef);
 
+            if (!campaignSnap.exists()) {
+                showError('指定された抽選企画が見つかりませんでした。URLが正しいか確認してください。');
+                return;
+            }
+
+            const campaign = campaignSnap.data();
+            campaign.id = campaignSnap.id;
+
+            // Check if user has already entered
+            const entryDocRef = doc(db, 'campaigns', campaign.id, 'entries', currentUser.uid);
+            const entrySnap = await getDoc(entryDocRef);
+
+            let userEntryStatus = null;
+            if (entrySnap.exists()) {
+                const entryData = entrySnap.data();
+                if (campaign.drawn) {
+                    userEntryStatus = entryData.isWinner ? 'winner' : 'lost';
+                } else {
+                    userEntryStatus = 'entered';
+                }
+
+                // Show status in entry screen
+                startEntry(campaign, userEntryStatus);
+            } else if (campaign.drawn) {
+                showError('この抽選企画は既に終了しています。');
+            } else {
+                startEntry(campaign);
+            }
+
+        } catch (error) {
+            console.error('Error loading campaign:', error);
+            showError('企画の読み込み中にエラーが発生しました。');
+        } finally {
+            showLoading(false);
+        }
+    } else {
+        // No ID in URL - only admins can access the admin screen
+        if (isAdmin(currentUser.email)) {
+            showScreen('adminScreen');
+            loadAdminCampaigns();
+        } else {
+            showError('企画者の発行した専用URLからアクセスしてください。直接のアクセスは制限されています。');
+        }
+    }
+}
+
+// ===========================
+// Campaign Management (Admin Only)
+// ===========================
+
+async function loadAdminCampaigns() {
     showLoading();
     try {
         const campaignsRef = collection(db, 'campaigns');
         const q = query(campaignsRef, orderBy('createdAt', 'desc'));
         const snapshot = await getDocs(q);
 
-        const campaignList = document.getElementById('campaignList');
         const adminCampaignList = document.getElementById('adminCampaignList');
-
-        // Clear lists
-        campaignList.innerHTML = '';
         adminCampaignList.innerHTML = '';
 
         if (snapshot.empty) {
-            campaignList.innerHTML = '<p style="text-align: center; color: #666;">現在、実施中の企画はありません</p>';
-            isLoadingCampaigns = false;
+            adminCampaignList.innerHTML = '<p style="text-align: center; color: #666;">まだ作成した企画はありません</p>';
             return;
         }
 
-        const userFrag = document.createDocumentFragment();
         const adminFrag = document.createDocumentFragment();
 
         for (const docSnap of snapshot.docs) {
             const campaign = docSnap.data();
             campaign.id = docSnap.id;
-
-            // Use pre-stored entry count for security and speed
             const entryCount = campaign.entryCount || 0;
 
-            // Check current user's entry status
-            let userEntryStatus = null;
-            if (currentUser) {
-                const entryDocRef = doc(db, 'campaigns', campaign.id, 'entries', currentUser.uid);
-                const entrySnap = await getDoc(entryDocRef);
-
-                if (entrySnap.exists()) {
-                    const entryData = entrySnap.data();
-                    if (campaign.drawn) {
-                        userEntryStatus = entryData.isWinner ? 'winner' : 'lost';
-                    } else {
-                        userEntryStatus = 'entered';
-                    }
-                }
-            }
-
-            // User view
-            const campaignDiv = createCampaignElement(campaign, entryCount, false, userEntryStatus);
-            userFrag.appendChild(campaignDiv);
-
-            // Admin view
-            if (currentUser && isAdmin(currentUser.email)) {
-                const adminCampaignDiv = createCampaignElement(campaign, entryCount, true);
-                adminFrag.appendChild(adminCampaignDiv);
-            }
+            const adminCampaignDiv = createAdminCampaignElement(campaign, entryCount);
+            adminFrag.appendChild(adminCampaignDiv);
         }
 
-        campaignList.appendChild(userFrag);
         adminCampaignList.appendChild(adminFrag);
 
     } catch (error) {
-        console.error('Load campaigns error:', error);
-        showToast('企画の読み込みに失敗しました', 'error');
+        console.error('Load admin campaigns error:', error);
+        showToast('データの読み込みに失敗しました', 'error');
     } finally {
         showLoading(false);
-        isLoadingCampaigns = false;
     }
 }
 
-function createCampaignElement(campaign, entryCount, isAdminView, userEntryStatus) {
+function createAdminCampaignElement(campaign, entryCount) {
     const div = document.createElement('div');
     div.className = 'campaign-item';
 
     const statusText = campaign.drawn ? '抽選済み' : '募集中';
     const statusColor = campaign.drawn ? '#999' : '#06FFA5';
 
-    let actionButtonHtml = '';
-    if (isAdminView) {
-        actionButtonHtml = `
-            <div class="campaign-actions">
-                <button class="btn btn-primary btn-draw" data-campaign-id="${campaign.id}" ${campaign.drawn ? 'disabled' : ''}>
-                    ${campaign.drawn ? '抽選済み' : '抽選を実行'}
-                </button>
-                ${campaign.drawn ? `
-                    <button class="btn btn-secondary btn-view-entries" data-campaign-id="${campaign.id}">
-                        結果・応募者
-                    </button>
-                ` : ''}
-            </div>
-        `;
-    } else {
-        let btnText = campaign.drawn ? '募集終了' : '応募する';
-        let btnDisabled = campaign.drawn ? 'disabled' : '';
-        let btnClass = 'btn-primary';
-
-        if (userEntryStatus === 'winner') {
-            btnText = '当選しました！連絡をお待ちください！';
-            btnDisabled = 'disabled';
-            btnClass = 'btn-secondary'; // 別の色に
-        } else if (userEntryStatus === 'lost') {
-            btnText = '残念ながら落選しました';
-            btnDisabled = 'disabled';
-            btnClass = 'btn-logout'; // 控えめな色に
-        } else if (userEntryStatus === 'entered') {
-            btnText = '応募済み';
-            btnDisabled = 'disabled';
-        }
-
-        actionButtonHtml = `
-            <div class="campaign-actions">
-                <button class="btn ${btnClass} btn-enter" data-campaign-id="${campaign.id}" ${btnDisabled}>
-                    ${btnText}
-                </button>
-            </div>
-        `;
-    }
+    // Generate campaign URL
+    const campaignUrl = `${window.location.origin}${window.location.pathname}?id=${campaign.id}`;
 
     div.innerHTML = `
         <h3>${campaign.name}</h3>
         <p>${campaign.description || ''}</p>
         <div class="campaign-stats">
-            <span>👑 作成者: ${campaign.createdByName || '管理者'}</span>
             <span>📊 応募数: ${entryCount}名</span>
             <span>🎯 当選者数: ${campaign.winnerCount || 1}名</span>
             <span style="color: ${statusColor}">● ${statusText}</span>
         </div>
-        ${actionButtonHtml}
+        <div class="url-share-section" style="margin-top: 15px; padding: 10px; background: rgba(0,0,0,0.05); border-radius: 8px;">
+            <p style="font-size: 0.8em; margin-bottom: 5px; color: #666;">🔗 配布用URL:</p>
+            <div style="display: flex; gap: 5px;">
+                <input type="text" class="input" value="${campaignUrl}" readonly style="font-size: 0.8em; padding: 5px;">
+                <button class="btn btn-secondary btn-copy" data-url="${campaignUrl}" style="padding: 5px 10px; font-size: 0.8em;">コピー</button>
+            </div>
+        </div>
+        <div class="campaign-actions" style="margin-top: 15px;">
+            <button class="btn btn-primary btn-draw" data-campaign-id="${campaign.id}" ${campaign.drawn ? 'disabled' : ''}>
+                ${campaign.drawn ? '抽選済み' : '抽選を実行'}
+            </button>
+            <button class="btn btn-secondary btn-view-entries" data-campaign-id="${campaign.id}">
+                結果・応募者
+            </button>
+        </div>
     `;
 
-    // Event listeners
-    if (isAdminView) {
-        const drawBtn = div.querySelector('.btn-draw');
-        const viewBtn = div.querySelector('.btn-view-entries');
+    // Copy event
+    div.querySelector('.btn-copy').addEventListener('click', (e) => {
+        const url = e.target.getAttribute('data-url');
+        navigator.clipboard.writeText(url).then(() => {
+            showToast('URLをコピーしました', 'success');
+        });
+    });
 
-        if (drawBtn) {
-            drawBtn.addEventListener('click', () => drawWinners(campaign));
-        }
-        if (viewBtn) {
-            viewBtn.addEventListener('click', () => viewEntries(campaign));
-        }
-    } else {
-        const enterBtn = div.querySelector('.btn-enter');
-        if (enterBtn) {
-            enterBtn.addEventListener('click', (e) => {
-                e.preventDefault();
-                if (campaign.drawn) {
-                    showToast('この企画は終了しています', 'info');
-                } else if (userEntryStatus === 'entered') {
-                    showToast('既に応募済みです', 'info');
-                } else {
-                    startEntry(campaign);
-                }
-            });
-        }
+    // Draw event
+    const drawBtn = div.querySelector('.btn-draw');
+    if (drawBtn) {
+        drawBtn.addEventListener('click', () => drawWinners(campaign));
+    }
+
+    // View entries event
+    const viewBtn = div.querySelector('.btn-view-entries');
+    if (viewBtn) {
+        viewBtn.addEventListener('click', () => viewEntries(campaign));
     }
 
     return div;
 }
 
-async function startEntry(campaign) {
+async function startEntry(campaign, userEntryStatus = null) {
     currentCampaign = campaign;
 
     // Reset form
@@ -315,6 +312,29 @@ async function startEntry(campaign) {
     document.getElementById('campaignTitle').textContent = `🎯 ${campaign.name} 🎯`;
     document.getElementById('campaignDescription').textContent = campaign.description || '';
 
+    // Handle status
+    const submitBtn = document.querySelector('#entryForm button[type="submit"]');
+
+    if (userEntryStatus) {
+        if (userEntryStatus === 'winner') {
+            submitBtn.textContent = '当選しました！おめでとうございます！';
+            submitBtn.disabled = true;
+            submitBtn.className = 'btn btn-secondary btn-large';
+        } else if (userEntryStatus === 'lost') {
+            submitBtn.textContent = '残念ながら落選しました';
+            submitBtn.disabled = true;
+            submitBtn.className = 'btn btn-logout btn-large';
+        } else if (userEntryStatus === 'entered') {
+            submitBtn.textContent = '既に応募済みです（結果待ち）';
+            submitBtn.disabled = true;
+            submitBtn.className = 'btn btn-secondary btn-large';
+        }
+    } else {
+        submitBtn.textContent = '応募する 🎉';
+        submitBtn.disabled = false;
+        submitBtn.className = 'btn btn-primary btn-large';
+    }
+
     showScreen('entryScreen');
 }
 
@@ -322,7 +342,6 @@ async function startEntry(campaign) {
 // Postal Code Auto-Lookup
 // ===========================
 
-// Initialize Postal Code Lookup (once at start)
 function initPostalCodeLookup() {
     const postalCodeInput = document.getElementById('postalCode');
     const addressInput = document.getElementById('address');
@@ -363,14 +382,13 @@ document.getElementById('entryForm').addEventListener('submit', async (e) => {
     }
 
     const phoneNumber = document.getElementById('phoneNumber').value.trim();
-    // Normalize phone number (remove hyphens, spaces, etc.)
     const normalizedPhone = phoneNumber.replace(/\D/g, '');
 
     const formData = {
         userId: currentUser.uid,
         email: document.getElementById('email').value.trim(),
         fullName: document.getElementById('fullName').value.trim(),
-        phoneNumber: normalizedPhone, // Store normalized number
+        phoneNumber: normalizedPhone,
         postalCode: document.getElementById('postalCode').value.trim(),
         address: document.getElementById('address').value.trim(),
         building: document.getElementById('building').value.trim(),
@@ -382,7 +400,6 @@ document.getElementById('entryForm').addEventListener('submit', async (e) => {
     try {
         const entryDocRef = doc(db, 'campaigns', currentCampaign.id, 'entries', currentUser.uid);
 
-        // 1. Check if this UID already has an entry (fast & direct)
         const existingEntryDoc = await getDoc(entryDocRef);
         if (existingEntryDoc.exists()) {
             showToast('このアカウントで既に応募済みです', 'error');
@@ -390,13 +407,8 @@ document.getElementById('entryForm').addEventListener('submit', async (e) => {
             return;
         }
 
-        // ※電話番号・住所の重複チェックはセキュリティの観点から管理者のみが行う設計にします。
-        // 個人ユーザーには他人のデータを検索する権限を与えないことで、最強のプライバシーを保護します。
-
-        // Add entry using UID as Document ID to guarantee uniqueness per campaign
         await setDoc(entryDocRef, formData);
 
-        // Increment entry count on campaign document securely
         const campaignRef = doc(db, 'campaigns', currentCampaign.id);
         await updateDoc(campaignRef, {
             entryCount: increment(1)
@@ -413,20 +425,10 @@ document.getElementById('entryForm').addEventListener('submit', async (e) => {
     }
 });
 
-// Back buttons
-document.getElementById('backToCampaigns').addEventListener('click', () => {
-    showScreen('campaignScreen');
-});
-
-document.getElementById('backToCampaignsFromSuccess').addEventListener('click', () => {
-    showScreen('campaignScreen');
-});
-
 // ===========================
 // Admin Functions
 // ===========================
 
-// Show create campaign form
 document.getElementById('showCreateCampaignForm').addEventListener('click', () => {
     document.getElementById('createCampaignForm').style.display = 'block';
 });
@@ -438,7 +440,6 @@ document.getElementById('cancelCreateCampaign').addEventListener('click', () => 
     document.getElementById('winnerCount').value = '1';
 });
 
-// Create campaign
 document.getElementById('createCampaignSubmit').addEventListener('click', async () => {
     const name = document.getElementById('newCampaignName').value.trim();
     const description = document.getElementById('newCampaignDesc').value.trim();
@@ -456,7 +457,7 @@ document.getElementById('createCampaignSubmit').addEventListener('click', async 
             name,
             description,
             winnerCount,
-            entryCount: 0, // Initialize count
+            entryCount: 0,
             createdBy: currentUser.uid,
             createdByName: currentUser.displayName || '不明なユーザー',
             createdAt: serverTimestamp(),
@@ -469,7 +470,7 @@ document.getElementById('createCampaignSubmit').addEventListener('click', async 
         document.getElementById('newCampaignDesc').value = '';
         document.getElementById('winnerCount').value = '1';
 
-        await loadCampaigns();
+        await loadAdminCampaigns();
     } catch (error) {
         console.error('Create campaign error:', error);
         showToast('企画の作成に失敗しました', 'error');
@@ -478,7 +479,6 @@ document.getElementById('createCampaignSubmit').addEventListener('click', async 
     }
 });
 
-// Draw winners
 async function drawWinners(campaign) {
     if (!confirm(`「${campaign.name}」の抽選を実行しますか？\nこの操作は取り消せません。`)) {
         return;
@@ -498,9 +498,9 @@ async function drawWinners(campaign) {
         const entries = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         const winnerCount = Math.min(campaign.winnerCount || 1, entries.length);
 
-        // Shuffle and select winners
         const shuffled = entries.sort(() => Math.random() - 0.5);
         const winners = shuffled.slice(0, winnerCount);
+        const winnersSet = new Set(winners.map(w => w.id));
 
         // Update winners
         for (const winner of winners) {
@@ -508,12 +508,19 @@ async function drawWinners(campaign) {
             await updateDoc(entryRef, { isWinner: true });
         }
 
+        // Delete losers (Personal info removal)
+        const losers = entries.filter(e => !winnersSet.has(e.id));
+        for (const loser of losers) {
+            const entryRef = doc(db, 'campaigns', campaign.id, 'entries', loser.id);
+            await deleteDoc(entryRef);
+        }
+
         // Mark campaign as drawn
         const campaignRef = doc(db, 'campaigns', campaign.id);
         await updateDoc(campaignRef, { drawn: true, drawnAt: serverTimestamp() });
 
         showToast(`抽選が完了しました！当選者: ${winnerCount}名`, 'success');
-        await loadCampaigns();
+        await loadAdminCampaigns();
     } catch (error) {
         console.error('Draw winners error:', error);
         showToast('抽選に失敗しました', 'error');
@@ -522,13 +529,10 @@ async function drawWinners(campaign) {
     }
 }
 
-// View entries
-// View entries and results (Admin only)
 async function viewEntries(campaign) {
     showLoading();
     try {
         const entriesRef = collection(db, 'campaigns', campaign.id, 'entries');
-        // インデックスエラー回避のため、クエリでは並べ替えず、全件取得後にJSでソートする
         const snapshot = await getDocs(entriesRef);
 
         if (snapshot.empty) {
@@ -537,11 +541,9 @@ async function viewEntries(campaign) {
             return;
         }
 
-        // データをJSの配列として取得
         const entries = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        const applicantsCount = entries.length;
+        const applicantsCount = campaign.entryCount || entries.length;
 
-        // 当選者のみを抽出して名前順にソート
         const winners = entries.filter(e => e.isWinner)
             .sort((a, b) => a.fullName.localeCompare(b.fullName));
 
@@ -573,16 +575,6 @@ async function viewEntries(campaign) {
     }
 }
 
-// Admin mode toggle
-document.getElementById('createCampaignBtn').addEventListener('click', () => {
-    showScreen('adminScreen');
-    loadCampaigns();
-});
-
-document.getElementById('backToUserMode').addEventListener('click', () => {
-    showScreen('campaignScreen');
-});
-
 // ===========================
 // Initial App Setup
 // ===========================
@@ -601,20 +593,10 @@ onAuthStateChanged(auth, async (user) => {
         document.getElementById('userName').textContent = user.displayName || '';
         document.getElementById('userInfo').style.display = 'flex';
 
-        // Show admin button if user is admin
-        if (isAdmin(currentUser.email)) {
-            document.getElementById('createCampaignBtn').style.display = 'block';
-        }
-
-        // Always switch to campaign screen if logged in
-        showScreen('campaignScreen');
-
-        // Load campaigns in background
-        loadCampaigns();
+        handleNavigationAfterLogin();
     } else {
         currentUser = null;
         document.getElementById('userInfo').style.display = 'none';
-        document.getElementById('createCampaignBtn').style.display = 'none';
         showScreen('loginScreen');
     }
 });

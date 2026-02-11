@@ -8,16 +8,14 @@ service cloud.firestore {
     }
 
     match /campaigns/{campaignId} {
-      // 企画は誰でも見れる
+      // 企画一覧と詳細は誰でも読み取り可能
       allow read: if true;
       
       // 作成と削除は管理者のみ
       allow create, delete: if isAdmin();
       
-      // 企画の更新：管理者は自由、ユーザーは「entryCount（応募数）」のみ更新可能
-      allow update: if isAdmin() || 
-                    (request.auth != null && 
-                     request.resource.data.diff(resource.data).affectedKeys().hasOnly(['entryCount']));
+      // 応募（entryCountの更新）はログインユーザーなら許可
+      allow update: if isAdmin() || (request.auth != null);
 
       match /entries/{entryId} {
         // 自分のデータ（IDが一致するデータ）か、管理者だけが読み書きできる

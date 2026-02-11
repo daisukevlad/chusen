@@ -62,20 +62,18 @@
         </div>
 
 
-        <!-- Campaign Selection Screen -->
-        <div id="campaignScreen" class="screen">
-            <div class="card campaign-card">
+        <!-- Error Screen (For invalid access) -->
+        <div id="errorScreen" class="screen">
+            <div class="card error-card">
                 <div class="card-header">
-                    <h2>🎪 抽選企画を選択 🎪</h2>
-                    <p>参加したい抽選企画を選んでください</p>
+                    <div class="error-icon">⚠️</div>
+                    <h2>アクセスエラー</h2>
                 </div>
                 <div class="card-body">
-                    <div id="campaignList" class="campaign-list">
-                        <!-- Campaigns will be loaded here -->
-                    </div>
-                    <button id="createCampaignBtn" class="btn btn-secondary" style="display: none;">
-                        🔑 管理者画面へ
-                    </button>
+                    <p id="errorMessage" class="error-message">
+                        企画者の発行したURLからアクセスしてください。
+                    </p>
+                    <button id="retryLoginBtn" class="btn btn-secondary">ログイン画面に戻る</button>
                 </div>
             </div>
         </div>
@@ -135,7 +133,6 @@
                         </div>
 
                         <button type="submit" class="btn btn-primary btn-large">応募する 🎉</button>
-                        <button type="button" id="backToCampaigns" class="btn btn-secondary">戻る</button>
                     </form>
                 </div>
             </div>
@@ -154,7 +151,6 @@
                         抽選結果は後日メールにてお知らせいたします。<br>
                         楽しみにお待ちください！
                     </p>
-                    <button id="backToCampaignsFromSuccess" class="btn btn-primary">企画一覧に戻る</button>
                 </div>
             </div>
         </div>
@@ -195,7 +191,7 @@
                         </div>
                     </div>
 
-                    <button id="backToUserMode" class="btn btn-secondary">ユーザー画面に戻る</button>
+                    <button id="backToLogin" class="btn btn-secondary">ログアウト</button>
                 </div>
             </div>
         </div>
