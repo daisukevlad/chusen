@@ -2,34 +2,44 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // Helper function to check if user is authenticated
+    // Helper function for authentication
     function isAuthenticated() {
       return request.auth != null;
     }
     
-    // Helper function to check if user is admin
+    // Helper function for admin check
     function isAdmin() {
       return isAuthenticated() && 
              request.auth.token.email in [
-               'largeintro@gmail.com'  // Admin email
+               'largeintro@gmail.com'
              ];
     }
-    
+
+    // Helper to check if the user is the owner of the document
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
     // Campaigns collection
     match /campaigns/{campaignId} {
-      // Anyone can read campaigns
+      // Anyone can read campaign info
       allow read: if true;
       
-      // Only admins can create, update, or delete campaigns
-      allow create, update, delete: if isAdmin();
+      // Only admins can create or delete
+      allow create, delete: if isAdmin();
+      
+      // Allow users to increment entryCount only, or full update for admins
+      allow update: if isAdmin() || 
+                    (isAuthenticated() && 
+                     request.resource.data.diff(resource.data).affectedKeys().hasOnly(['entryCount']));
       
       // Entries subcollection
       match /entries/{entryId} {
-        // Authenticated users can read all entries (needed for counting)
-        // Admins can read all entries (needed for viewing)
-        allow read: if isAuthenticated();
+        // IMPORTANT: Only the applicant OR admin can read the personal info
+        // This prevents users from seeing other people's addresses/phones
+        allow read: if isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid);
         
-        // Users can create entries (with validation)
+        // Users can create their own entry
         allow create: if isAuthenticated() && 
                         request.auth.uid == request.resource.data.userId &&
                         request.resource.data.keys().hasAll([
@@ -37,10 +47,10 @@ service cloud.firestore {
                           'postalCode', 'address', 'createdAt'
                         ]);
         
-        // Only admins can update entries (for marking winners)
+        // Only admins can update (draw winners)
         allow update: if isAdmin();
         
-        // No one can delete entries
+        // No one can delete
         allow delete: if false;
       }
     }

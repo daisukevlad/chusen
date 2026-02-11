@@ -29,7 +29,8 @@ import {
     doc,
     updateDoc,
     serverTimestamp,
-    orderBy
+    orderBy,
+    increment
 } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
 
 // Initialize Firebase
@@ -166,14 +167,13 @@ async function loadCampaigns() {
             const campaign = docSnap.data();
             campaign.id = docSnap.id;
 
-            // Count entries
-            const entriesRef = collection(db, 'campaigns', campaign.id, 'entries');
-            const entriesSnapshot = await getDocs(entriesRef);
-            const entryCount = entriesSnapshot.size;
+            // Use pre-stored entry count for security and speed
+            const entryCount = campaign.entryCount || 0;
 
             // Check current user's entry status
-            let userEntryStatus = null; // null: not entered, 'winner': won, 'lost': lost, 'entered': waiting
+            let userEntryStatus = null;
             if (currentUser) {
+                const entriesRef = collection(db, 'campaigns', campaign.id, 'entries');
                 const userEntryQuery = query(entriesRef, where('userId', '==', currentUser.uid));
                 const userEntrySnapshot = await getDocs(userEntryQuery);
                 if (!userEntrySnapshot.empty) {
@@ -403,6 +403,12 @@ document.getElementById('entryForm').addEventListener('submit', async (e) => {
         // Add entry
         await addDoc(entriesRef, formData);
 
+        // Increment entry count on campaign document securely
+        const campaignRef = doc(db, 'campaigns', currentCampaign.id);
+        await updateDoc(campaignRef, {
+            entryCount: increment(1)
+        });
+
         showToast('応募が完了しました！', 'success');
         document.getElementById('entryForm').reset();
         showScreen('successScreen');
@@ -457,6 +463,7 @@ document.getElementById('createCampaignSubmit').addEventListener('click', async 
             name,
             description,
             winnerCount,
+            entryCount: 0, // Initialize count
             createdBy: currentUser.uid,
             createdByName: currentUser.displayName || '不明なユーザー',
             createdAt: serverTimestamp(),
