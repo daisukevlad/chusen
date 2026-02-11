@@ -242,6 +242,48 @@ async function startEntry(campaign) {
     document.getElementById('campaignDescription').textContent = campaign.description || '';
 
     showScreen('entryScreen');
+
+    // Setup postal code auto-lookup
+    setupPostalCodeLookup();
+}
+
+// ===========================
+// Postal Code Auto-Lookup
+// ===========================
+
+function setupPostalCodeLookup() {
+    const postalCodeInput = document.getElementById('postalCode');
+    const addressInput = document.getElementById('address');
+    const loadingIndicator = document.getElementById('postalCodeLoading');
+
+    postalCodeInput.addEventListener('input', async (e) => {
+        const postalCode = e.target.value.replace(/[^0-9]/g, '');
+
+        // Only lookup when exactly 7 digits are entered
+        if (postalCode.length === 7) {
+            loadingIndicator.style.display = 'inline';
+
+            try {
+                const response = await fetch(`https://zipcloud.ibsnet.co.jp/api/search?zipcode=${postalCode}`);
+                const data = await response.json();
+
+                if (data.status === 200 && data.results) {
+                    const result = data.results[0];
+                    // Combine prefecture, city, and town
+                    const fullAddress = `${result.address1}${result.address2}${result.address3}`;
+                    addressInput.value = fullAddress;
+                    showToast('住所を自動入力しました', 'success');
+                } else {
+                    showToast('郵便番号が見つかりませんでした', 'error');
+                }
+            } catch (error) {
+                console.error('Postal code lookup error:', error);
+                showToast('住所の取得に失敗しました', 'error');
+            } finally {
+                loadingIndicator.style.display = 'none';
+            }
+        }
+    });
 }
 
 // Entry Form Submission
@@ -469,12 +511,21 @@ document.getElementById('backToUserMode').addEventListener('click', () => {
 // Auth State Observer
 // ===========================
 
-onAuthStateChanged(auth, (user) => {
+onAuthStateChanged(auth, async (user) => {
     if (user) {
         currentUser = user;
         document.getElementById('userPhoto').src = user.photoURL;
         document.getElementById('userName').textContent = user.displayName;
         document.getElementById('userInfo').style.display = 'flex';
+
+        // Show admin button if user is admin
+        if (isAdmin(currentUser.email)) {
+            document.getElementById('createCampaignBtn').style.display = 'block';
+        }
+
+        // Load campaigns and show campaign screen
+        await loadCampaigns();
+        showScreen('campaignScreen');
     } else {
         currentUser = null;
         document.getElementById('userInfo').style.display = 'none';

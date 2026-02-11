@@ -25,9 +25,9 @@ service cloud.firestore {
       
       // Entries subcollection
       match /entries/{entryId} {
-        // Users can read their own entries, admins can read all
-        allow read: if isAuthenticated() && 
-                      (request.auth.uid == resource.data.userId || isAdmin());
+        // Authenticated users can read all entries (needed for counting)
+        // Admins can read all entries (needed for viewing)
+        allow read: if isAuthenticated();
         
         // Users can create entries (with validation)
         allow create: if isAuthenticated() && 
