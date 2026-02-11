@@ -354,6 +354,7 @@ document.getElementById('entryForm').addEventListener('submit', async (e) => {
         return;
     }
 
+    const phoneNumber = document.getElementById('phoneNumber').value.trim();
     // Normalize phone number (remove hyphens, spaces, etc.)
     const normalizedPhone = phoneNumber.replace(/\D/g, '');
 

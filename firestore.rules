@@ -36,12 +36,13 @@ service cloud.firestore {
       // Entries subcollection
       match /entries/{entryId} {
         // IMPORTANT: Only the applicant OR admin can read the personal info
-        // This prevents users from seeing other people's addresses/phones
-        allow read: if isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid);
+        // We use entryId because we set it to the user's UID (request.auth.uid)
+        allow read: if isAdmin() || (isAuthenticated() && entryId == request.auth.uid);
         
         // Users can create their own entry
         allow create: if isAuthenticated() && 
                         request.auth.uid == request.resource.data.userId &&
+                        request.auth.uid == entryId &&
                         request.resource.data.keys().hasAll([
                           'userId', 'email', 'fullName', 'phoneNumber', 
                           'postalCode', 'address', 'createdAt'
