@@ -2,57 +2,21 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // Helper function for authentication
-    function isAuthenticated() {
-      return request.auth != null;
-    }
-    
-    // Helper function for admin check
+    function isAuthenticated() { return request.auth != null; }
     function isAdmin() {
-      return isAuthenticated() && 
-             request.auth.token.email in [
-               'largeintro@gmail.com'
-             ];
+      return isAuthenticated() && request.auth.token.email in ['largeintro@gmail.com'];
     }
 
-    // Helper to check if the user is the owner of the document
-    function isOwner(userId) {
-      return isAuthenticated() && request.auth.uid == userId;
-    }
-
-    // Campaigns collection
     match /campaigns/{campaignId} {
-      // Anyone can read campaign info
       allow read: if true;
-      
-      // Only admins can create or delete
       allow create, delete: if isAdmin();
       
-      // Allow users to increment entryCount only, or full update for admins
-      allow update: if isAdmin() || 
-                    (isAuthenticated() && 
-                     request.resource.data.diff(resource.data).affectedKeys().hasOnly(['entryCount']));
-      
-      // Entries subcollection
+      // 応募者数の更新 (+1) を許可
+      allow update: if isAdmin() || (isAuthenticated() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['entryCount']));
+
       match /entries/{entryId} {
-        // IMPORTANT: Only the applicant OR admin can read the personal info
-        // We use entryId because we set it to the user's UID (request.auth.uid)
-        allow read: if isAdmin() || (isAuthenticated() && entryId == request.auth.uid);
-        
-        // Users can create their own entry
-        allow create: if isAuthenticated() && 
-                        request.auth.uid == request.resource.data.userId &&
-                        request.auth.uid == entryId &&
-                        request.resource.data.keys().hasAll([
-                          'userId', 'email', 'fullName', 'phoneNumber', 
-                          'postalCode', 'address', 'createdAt'
-                        ]);
-        
-        // Only admins can update (draw winners)
-        allow update: if isAdmin();
-        
-        // No one can delete
-        allow delete: if false;
+        // 自分のIDの名前のデータなら読み書き自由（他人のデータは見れない）
+        allow read, write: if isAdmin() || (isAuthenticated() && entryId == request.auth.uid);
       }
     }
   }
