@@ -175,11 +175,11 @@ async function loadCampaigns() {
             // Check current user's entry status
             let userEntryStatus = null;
             if (currentUser) {
-                const entriesRef = collection(db, 'campaigns', campaign.id, 'entries');
-                const userEntryQuery = query(entriesRef, where('userId', '==', currentUser.uid));
-                const userEntrySnapshot = await getDocs(userEntryQuery);
-                if (!userEntrySnapshot.empty) {
-                    const entryData = userEntrySnapshot.docs[0].data();
+                const entryDocRef = doc(db, 'campaigns', campaign.id, 'entries', currentUser.uid);
+                const entrySnap = await getDoc(entryDocRef);
+
+                if (entrySnap.exists()) {
+                    const entryData = entrySnap.data();
                     if (campaign.drawn) {
                         userEntryStatus = entryData.isWinner ? 'winner' : 'lost';
                     } else {
@@ -387,31 +387,8 @@ document.getElementById('entryForm').addEventListener('submit', async (e) => {
             return;
         }
 
-        const entriesRef = collection(db, 'campaigns', currentCampaign.id, 'entries');
-
-        // 2. Check phone number duplicate (normalized)
-        const phoneQuery = query(entriesRef, where('phoneNumber', '==', formData.phoneNumber));
-        const phoneSnapshot = await getDocs(phoneQuery);
-
-        if (!phoneSnapshot.empty) {
-            showToast('この電話番号で既に応募済みです', 'error');
-            showLoading(false);
-            return;
-        }
-
-        // 3. Check address duplicate
-        const addressQuery = query(
-            entriesRef,
-            where('postalCode', '==', formData.postalCode),
-            where('address', '==', formData.address)
-        );
-        const addressSnapshot = await getDocs(addressQuery);
-
-        if (!addressSnapshot.empty) {
-            showToast('この住所で既に応募済みです。1世帯につき1回のみ応募可能です。', 'error');
-            showLoading(false);
-            return;
-        }
+        // ※電話番号・住所の重複チェックはセキュリティの観点から管理者のみが行う設計にします。
+        // 個人ユーザーには他人のデータを検索する権限を与えないことで、最強のプライバシーを保護します。
 
         // Add entry using UID as Document ID to guarantee uniqueness per campaign
         await setDoc(entryDocRef, formData);
