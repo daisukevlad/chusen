@@ -171,8 +171,23 @@ async function loadCampaigns() {
             const entriesSnapshot = await getDocs(entriesRef);
             const entryCount = entriesSnapshot.size;
 
+            // Check current user's entry status
+            let userEntryStatus = null; // null: not entered, 'winner': won, 'lost': lost, 'entered': waiting
+            if (currentUser) {
+                const userEntryQuery = query(entriesRef, where('userId', '==', currentUser.uid));
+                const userEntrySnapshot = await getDocs(userEntryQuery);
+                if (!userEntrySnapshot.empty) {
+                    const entryData = userEntrySnapshot.docs[0].data();
+                    if (campaign.drawn) {
+                        userEntryStatus = entryData.isWinner ? 'winner' : 'lost';
+                    } else {
+                        userEntryStatus = 'entered';
+                    }
+                }
+            }
+
             // User view
-            const campaignDiv = createCampaignElement(campaign, entryCount, false);
+            const campaignDiv = createCampaignElement(campaign, entryCount, false, userEntryStatus);
             userFrag.appendChild(campaignDiv);
 
             // Admin view
@@ -194,37 +209,62 @@ async function loadCampaigns() {
     }
 }
 
-function createCampaignElement(campaign, entryCount, isAdminView) {
+function createCampaignElement(campaign, entryCount, isAdminView, userEntryStatus) {
     const div = document.createElement('div');
     div.className = 'campaign-item';
 
     const statusText = campaign.drawn ? '抽選済み' : '募集中';
     const statusColor = campaign.drawn ? '#999' : '#06FFA5';
 
-    div.innerHTML = `
-        <h3>${campaign.name}</h3>
-        <p>${campaign.description || ''}</p>
-        <div class="campaign-stats">
-            <span>📊 応募数: ${entryCount}名</span>
-            <span>🎯 当選者数: ${campaign.winnerCount || 1}名</span>
-            <span style="color: ${statusColor}">● ${statusText}</span>
-        </div>
-        ${isAdminView ? `
+    let actionButtonHtml = '';
+    if (isAdminView) {
+        actionButtonHtml = `
             <div class="campaign-actions">
                 <button class="btn btn-primary btn-draw" data-campaign-id="${campaign.id}" ${campaign.drawn ? 'disabled' : ''}>
                     ${campaign.drawn ? '抽選済み' : '抽選を実行'}
                 </button>
                 <button class="btn btn-secondary btn-view-entries" data-campaign-id="${campaign.id}">
-                    応募者を見る
+                    結果・応募者
                 </button>
             </div>
-        ` : `
+        `;
+    } else {
+        let btnText = campaign.drawn ? '募集終了' : '応募する';
+        let btnDisabled = campaign.drawn ? 'disabled' : '';
+        let btnClass = 'btn-primary';
+
+        if (userEntryStatus === 'winner') {
+            btnText = '🎊 当選しました！';
+            btnDisabled = 'disabled';
+            btnClass = 'btn-secondary'; // 別の色に
+        } else if (userEntryStatus === 'lost') {
+            btnText = '残念ながら落選しました';
+            btnDisabled = 'disabled';
+            btnClass = 'btn-logout'; // 控えめな色に
+        } else if (userEntryStatus === 'entered') {
+            btnText = '応募済み';
+            btnDisabled = 'disabled';
+        }
+
+        actionButtonHtml = `
             <div class="campaign-actions">
-                <button class="btn btn-primary btn-enter" data-campaign-id="${campaign.id}" ${campaign.drawn ? 'disabled' : ''}>
-                    ${campaign.drawn ? '募集終了' : '応募する'}
+                <button class="btn ${btnClass} btn-enter" data-campaign-id="${campaign.id}" ${btnDisabled}>
+                    ${btnText}
                 </button>
             </div>
-        `}
+        `;
+    }
+
+    div.innerHTML = `
+        <h3>${campaign.name}</h3>
+        <p>${campaign.description || ''}</p>
+        <div class="campaign-stats">
+            <span>👑 作成者: ${campaign.createdByName || '管理者'}</span>
+            <span>📊 応募数: ${entryCount}名</span>
+            <span>🎯 当選者数: ${campaign.winnerCount || 1}名</span>
+            <span style="color: ${statusColor}">● ${statusText}</span>
+        </div>
+        ${actionButtonHtml}
     `;
 
     // Event listeners
@@ -416,6 +456,7 @@ document.getElementById('createCampaignSubmit').addEventListener('click', async 
             description,
             winnerCount,
             createdBy: currentUser.uid,
+            createdByName: currentUser.displayName || '不明なユーザー',
             createdAt: serverTimestamp(),
             drawn: false
         });
@@ -480,33 +521,50 @@ async function drawWinners(campaign) {
 }
 
 // View entries
+// View entries and results (Admin only)
 async function viewEntries(campaign) {
     showLoading();
     try {
         const entriesRef = collection(db, 'campaigns', campaign.id, 'entries');
-        const snapshot = await getDocs(entriesRef);
+        const q = query(entriesRef, orderBy('isWinner', 'desc'), orderBy('fullName', 'asc')); // 当選者を上に
+        const snapshot = await getDocs(q);
 
         if (snapshot.empty) {
-            alert('応募者がいません');
+            alert('応募者がまだいません');
             showLoading(false);
             return;
         }
 
-        let message = `【${campaign.name}】応募者一覧\n\n`;
+        let resultMessage = `【${campaign.name}】抽選結果・応募者リスト\n`;
+        resultMessage += `------------------------------------\n\n`;
+
+        let winnerCount = 0;
+        let entriesInfo = "";
 
         snapshot.docs.forEach((doc, index) => {
             const entry = doc.data();
-            const status = entry.isWinner ? '🎊 当選' : '';
-            message += `${index + 1}. ${entry.fullName} ${status}\n`;
-            message += `   電話: ${entry.phoneNumber}\n`;
-            message += `   住所: 〒${entry.postalCode} ${entry.address} ${entry.building || ''}\n`;
-            message += `   メール: ${entry.email}\n\n`;
+            const statusIcon = entry.isWinner ? '🎊 【当選】' : '▫️【落選】';
+
+            entriesInfo += `${statusIcon} ${entry.fullName}\n`;
+
+            // 当選者のみ個人情報を表示
+            if (entry.isWinner) {
+                winnerCount++;
+                entriesInfo += `   📧: ${entry.email}\n`;
+                entriesInfo += `   📞: ${entry.phoneNumber}\n`;
+                entriesInfo += `   🏠: 〒${entry.postalCode} ${entry.address} ${entry.building || ''}\n`;
+            } else {
+                entriesInfo += `   (落選者の個人情報は非表示です)\n`;
+            }
+            entriesInfo += `------------------------------------\n`;
         });
 
-        alert(message);
+        const finalHeader = `総応募数: ${snapshot.size}名 / 当選確定: ${winnerCount}名\n\n`;
+        alert(finalHeader + resultMessage + entriesInfo);
+
     } catch (error) {
         console.error('View entries error:', error);
-        showToast('応募者の取得に失敗しました', 'error');
+        showToast('データの取得に失敗しました', 'error');
     } finally {
         showLoading(false);
     }
