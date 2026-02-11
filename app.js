@@ -284,8 +284,17 @@ function createCampaignElement(campaign, entryCount, isAdminView, userEntryStatu
         }
     } else {
         const enterBtn = div.querySelector('.btn-enter');
-        if (enterBtn && !campaign.drawn) {
-            enterBtn.addEventListener('click', () => startEntry(campaign));
+        if (enterBtn) {
+            enterBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                if (campaign.drawn) {
+                    showToast('この企画は終了しています', 'info');
+                } else if (userEntryStatus === 'entered') {
+                    showToast('既に応募済みです', 'info');
+                } else {
+                    startEntry(campaign);
+                }
+            });
         }
     }
 
@@ -295,49 +304,45 @@ function createCampaignElement(campaign, entryCount, isAdminView, userEntryStatu
 async function startEntry(campaign) {
     currentCampaign = campaign;
 
+    // Reset form
+    document.getElementById('entryForm').reset();
+
     // Pre-fill email
-    document.getElementById('email').value = currentUser.email;
+    document.getElementById('email').value = currentUser.email || '';
     document.getElementById('campaignTitle').textContent = `🎯 ${campaign.name} 🎯`;
     document.getElementById('campaignDescription').textContent = campaign.description || '';
 
     showScreen('entryScreen');
-
-    // Setup postal code auto-lookup
-    setupPostalCodeLookup();
 }
 
 // ===========================
 // Postal Code Auto-Lookup
 // ===========================
 
-function setupPostalCodeLookup() {
+// Initialize Postal Code Lookup (once at start)
+function initPostalCodeLookup() {
     const postalCodeInput = document.getElementById('postalCode');
     const addressInput = document.getElementById('address');
     const loadingIndicator = document.getElementById('postalCodeLoading');
 
+    if (!postalCodeInput) return;
+
     postalCodeInput.addEventListener('input', async (e) => {
         const postalCode = e.target.value.replace(/[^0-9]/g, '');
 
-        // Only lookup when exactly 7 digits are entered
         if (postalCode.length === 7) {
             loadingIndicator.style.display = 'inline';
-
             try {
                 const response = await fetch(`https://zipcloud.ibsnet.co.jp/api/search?zipcode=${postalCode}`);
                 const data = await response.json();
 
                 if (data.status === 200 && data.results) {
                     const result = data.results[0];
-                    // Combine prefecture, city, and town
-                    const fullAddress = `${result.address1}${result.address2}${result.address3}`;
-                    addressInput.value = fullAddress;
+                    addressInput.value = `${result.address1}${result.address2}${result.address3}`;
                     showToast('住所を自動入力しました', 'success');
-                } else {
-                    showToast('郵便番号が見つかりませんでした', 'error');
                 }
             } catch (error) {
                 console.error('Postal code lookup error:', error);
-                showToast('住所の取得に失敗しました', 'error');
             } finally {
                 loadingIndicator.style.display = 'none';
             }
@@ -596,6 +601,13 @@ document.getElementById('createCampaignBtn').addEventListener('click', () => {
 
 document.getElementById('backToUserMode').addEventListener('click', () => {
     showScreen('campaignScreen');
+});
+
+// ===========================
+// Initial App Setup
+// ===========================
+document.addEventListener('DOMContentLoaded', () => {
+    initPostalCodeLookup();
 });
 
 // ===========================
