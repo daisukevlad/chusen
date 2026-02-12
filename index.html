@@ -83,19 +83,25 @@
             <div class="card entry-card">
                 <div class="card-header">
                     <h2 id="campaignTitle">🎯 応募フォーム 🎯</h2>
-                    <p id="campaignDescription"></p>
                 </div>
                 <div class="card-body">
-                    <form id="entryForm">
+                    <div id="campaignDescription" class="campaign-description-box"></div>
+
+                    <form id="entryForm" style="margin-top: 25px;">
+                        <!-- Honeypot field to deter simple bots -->
+                        <div style="display:none;">
+                            <label>Leave this field empty</label>
+                            <input type="text" name="bot_check" id="botCheck" value="">
+                        </div>
                         <div class="form-group">
                             <label for="fullName">お名前 *</label>
-                            <input type="text" id="fullName" class="input" required>
+                            <input type="text" id="fullName" class="input" maxlength="50" required>
                         </div>
 
                         <div class="form-group">
                             <label for="phoneNumber">電話番号 *</label>
                             <input type="tel" id="phoneNumber" class="input" placeholder="09012345678"
-                                pattern="[0-9]{10,11}" required>
+                                pattern="[0-9]{10,11}" maxlength="11" required>
                             <small>ハイフンなしで入力してください（重複応募防止のため）</small>
                         </div>
 
@@ -104,18 +110,19 @@
                                     style="display: none; color: var(--primary-purple); font-size: 0.9em;">🔍
                                     検索中...</span></label>
                             <input type="text" id="postalCode" class="input" placeholder="1234567" pattern="[0-9]{7}"
-                                required>
+                                maxlength="7" required>
                             <small>ハイフンなしで入力してください（7桁入力で自動検索）</small>
                         </div>
 
                         <div class="form-group">
                             <label for="address">住所 *</label>
-                            <input type="text" id="address" class="input" placeholder="都道府県市区町村番地" required>
+                            <input type="text" id="address" class="input" placeholder="都道府県市区町村番地" maxlength="200"
+                                required>
                         </div>
 
                         <div class="form-group">
                             <label for="building">建物名・部屋番号</label>
-                            <input type="text" id="building" class="input" placeholder="マンション名 101号室">
+                            <input type="text" id="building" class="input" placeholder="マンション名 101号室" maxlength="100">
                         </div>
 
                         <div class="form-group">
@@ -169,11 +176,11 @@
                         <div id="createCampaignForm" style="display: none; margin-top: 20px;">
                             <div class="form-group">
                                 <label for="newCampaignName">企画名</label>
-                                <input type="text" id="newCampaignName" class="input" required>
+                                <input type="text" id="newCampaignName" class="input" maxlength="100" required>
                             </div>
                             <div class="form-group">
                                 <label for="newCampaignDesc">説明</label>
-                                <textarea id="newCampaignDesc" class="input" rows="3"></textarea>
+                                <textarea id="newCampaignDesc" class="input" rows="5" maxlength="2000"></textarea>
                             </div>
                             <div class="form-group">
                                 <label for="winnerCount">当選者数</label>

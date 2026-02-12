@@ -80,6 +80,13 @@ function showScreen(screenId) {
     document.getElementById(screenId).classList.add('active');
 }
 
+function escapeHTML(str) {
+    if (!str) return '';
+    const p = document.createElement('p');
+    p.textContent = str;
+    return p.innerHTML;
+}
+
 function isAdmin(email) {
     return email && ADMIN_EMAILS.includes(email);
 }
@@ -258,8 +265,8 @@ function createAdminCampaignElement(campaign, entryCount) {
     const campaignUrl = `${baseUrl}?id=${campaign.id}`;
 
     div.innerHTML = `
-        <h3>${campaign.name}</h3>
-        <p>${campaign.description || ''}</p>
+        <h3>${escapeHTML(campaign.name)}</h3>
+        <p style="white-space: pre-wrap;">${escapeHTML(campaign.description || '')}</p>
         <div class="campaign-stats">
             <span>📊 応募数: ${entryCount}名</span>
             <span>🎯 当選者数: ${campaign.winnerCount || 1}名</span>
@@ -381,9 +388,12 @@ function normalizeAddress(address) {
     if (!address) return '';
     return address
         .replace(/[！-～]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xfee0)) // 全角→半角
-        .replace(/\d/g, s => s) // 数字
+        .replace(/[０-９]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xfee0)) // 全角数字→半角
         .replace(/\s+/g, '') // 空白削除
-        .replace(/[ー－―‐－]/g, '-') // ハイフン類を統一
+        .replace(/[ー－―‐－]|\s/g, '-') // ハイフン類を統一
+        .replace(/[丁目|丁|番地|番|号]/g, '-') // 住所の代表的な区切りを統一
+        .replace(/-+/g, '-') // 連続するハイフンを一つに
+        .replace(/-$/, '') // 末尾のハイフンを削除
         .toLowerCase();
 }
 
@@ -393,6 +403,14 @@ document.getElementById('entryForm').addEventListener('submit', async (e) => {
 
     if (!currentCampaign) {
         showToast('企画が選択されていません', 'error');
+        return;
+    }
+
+    // Honeypot check
+    const botCheck = document.getElementById('botCheck').value;
+    if (botCheck !== '') {
+        console.warn('Bot detected via honeypot');
+        showToast('エラーが発生しました（Bot検知）', 'error');
         return;
     }
 
