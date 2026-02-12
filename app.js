@@ -31,6 +31,7 @@ import {
     setDoc,
     getDoc,
     deleteDoc,
+    writeBatch,
     serverTimestamp,
     orderBy,
     increment
@@ -375,6 +376,17 @@ function initPostalCodeLookup() {
     });
 }
 
+// --- 重複チェック用の正規化関数 ---
+function normalizeAddress(address) {
+    if (!address) return '';
+    return address
+        .replace(/[！-～]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xfee0)) // 全角→半角
+        .replace(/\d/g, s => s) // 数字
+        .replace(/\s+/g, '') // 空白削除
+        .replace(/[ー－―‐－]/g, '-') // ハイフン類を統一
+        .toLowerCase();
+}
+
 // Entry Form Submission
 document.getElementById('entryForm').addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -384,8 +396,10 @@ document.getElementById('entryForm').addEventListener('submit', async (e) => {
         return;
     }
 
-    const phoneNumber = document.getElementById('phoneNumber').value.trim();
-    const normalizedPhone = phoneNumber.replace(/\D/g, '');
+    const rawPhone = document.getElementById('phoneNumber').value.trim();
+    const normalizedPhone = rawPhone.replace(/\D/g, ''); // 数字のみ
+    const rawAddress = document.getElementById('address').value.trim();
+    const normalizedAddr = normalizeAddress(rawAddress);
 
     const formData = {
         userId: currentUser.uid,
@@ -393,7 +407,7 @@ document.getElementById('entryForm').addEventListener('submit', async (e) => {
         fullName: document.getElementById('fullName').value.trim(),
         phoneNumber: normalizedPhone,
         postalCode: document.getElementById('postalCode').value.trim(),
-        address: document.getElementById('address').value.trim(),
+        address: rawAddress,
         building: document.getElementById('building').value.trim(),
         createdAt: serverTimestamp(),
         isWinner: false
@@ -403,6 +417,11 @@ document.getElementById('entryForm').addEventListener('submit', async (e) => {
     try {
         const entryDocRef = doc(db, 'campaigns', currentCampaign.id, 'entries', currentUser.uid);
 
+        // 重複チェック用ドキュメントの参照
+        const phoneRegRef = doc(db, 'campaigns', currentCampaign.id, 'registries', `phone_${normalizedPhone}`);
+        const addrRegRef = doc(db, 'campaigns', currentCampaign.id, 'registries', `addr_${normalizedAddr}`);
+
+        // 1. まず既存のUIDでの応募をチェック
         const existingEntryDoc = await getDoc(entryDocRef);
         if (existingEntryDoc.exists()) {
             showToast('このアカウントで既に応募済みです', 'error');
@@ -410,12 +429,36 @@ document.getElementById('entryForm').addEventListener('submit', async (e) => {
             return;
         }
 
-        await setDoc(entryDocRef, formData);
+        // 2. 電話番号と住所の重複をチェック（registriesを参照）
+        const [phoneSnap, addrSnap] = await Promise.all([
+            getDoc(phoneRegRef),
+            getDoc(addrRegRef)
+        ]);
+
+        if (phoneSnap.exists()) {
+            showToast('この電話番号は既に使用されています', 'error');
+            showLoading(false);
+            return;
+        }
+        if (addrSnap.exists()) {
+            showToast('この住所（または同一世帯）からの応募は既に受け付けています', 'error');
+            showLoading(false);
+            return;
+        }
+
+        // 3. 全てOKなら登録処理（アトミックな書き込み）
+        const batch = writeBatch(db);
+
+        batch.set(entryDocRef, formData);
+        batch.set(phoneRegRef, { used: true, uid: currentUser.uid });
+        batch.set(addrRegRef, { used: true, uid: currentUser.uid });
 
         const campaignRef = doc(db, 'campaigns', currentCampaign.id);
-        await updateDoc(campaignRef, {
+        batch.update(campaignRef, {
             entryCount: increment(1)
         });
+
+        await batch.commit();
 
         showToast('応募が完了しました！', 'success');
         document.getElementById('entryForm').reset();
@@ -512,10 +555,22 @@ async function drawWinners(campaign) {
         }
 
         // Delete losers (Personal info removal)
+        // AND cleanup registries
         const losers = entries.filter(e => !winnersSet.has(e.id));
         for (const loser of losers) {
             const entryRef = doc(db, 'campaigns', campaign.id, 'entries', loser.id);
             await deleteDoc(entryRef);
+
+            // Cleanup corresponding registries to allow these people to enter future campaigns if needed
+            // But usually we keep them for the current campaign duration. 
+            // In our case, the campaign is FINISHED, so registries can be cleared.
+        }
+
+        // Optional: Delete ALL registries for this campaign since it's finished
+        const registriesRef = collection(db, 'campaigns', campaign.id, 'registries');
+        const registriesSnap = await getDocs(registriesRef);
+        for (const regDoc of registriesSnap.docs) {
+            await deleteDoc(regDoc.ref);
         }
 
         // Mark campaign as drawn

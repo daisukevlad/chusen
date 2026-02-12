@@ -40,6 +40,12 @@ service cloud.firestore {
         // 【重要】削除：管理者が抽選後に落選データを消すために設定
         allow delete: if isAdmin();
       }
+
+      match /registries/{registryId} {
+        // 重複チェック用のデータはログインユーザーなら読み書き可能
+        allow get, create: if isAuthenticated();
+        allow delete: if isAdmin();
+      }
     }
   }
 }
