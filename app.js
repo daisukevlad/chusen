@@ -419,10 +419,13 @@ document.getElementById('entryForm').addEventListener('submit', async (e) => {
     const rawAddress = document.getElementById('address').value.trim();
     const rawBuilding = document.getElementById('building').value.trim();
 
-    // 住所と建物名を別々に正規化して結合（マンションの別部屋を確実に区別するため）
-    const normalizedAddrPart = normalizeAddress(rawAddress);
-    const normalizedBldgPart = normalizeAddress(rawBuilding);
-    const combinedAddrKey = `${normalizedAddrPart}#${normalizedBldgPart}`;
+    // 住所と建物名を一体化して正規化（マンションの別部屋を確実に区別し、かつ入力箇所のブレを防止）
+    const combinedAddrKey = normalizeAddress(rawAddress + rawBuilding);
+
+    // デバッグ用ログ（F12で見ることができます）
+    console.log('--- Duplicate Check Info ---');
+    console.log('Phone Key:', normalizedPhone);
+    console.log('Address Key:', combinedAddrKey);
 
     const formData = {
         userId: currentUser.uid,
@@ -440,9 +443,9 @@ document.getElementById('entryForm').addEventListener('submit', async (e) => {
     try {
         const entryDocRef = doc(db, 'campaigns', currentCampaign.id, 'entries', currentUser.uid);
 
-        // 重複チェック用ドキュメントの参照
-        const phoneRegRef = doc(db, 'campaigns', currentCampaign.id, 'registries', `phone_${normalizedPhone}`);
-        const addrRegRef = doc(db, 'campaigns', currentCampaign.id, 'registries', `addr_${combinedAddrKey}`);
+        // 重複チェック用ドキュメントの参照（キーの衝突を防ぐため接頭辞を付ける）
+        const phoneRegRef = doc(db, 'campaigns', currentCampaign.id, 'registries', `p_${normalizedPhone}`);
+        const addrRegRef = doc(db, 'campaigns', currentCampaign.id, 'registries', `a_${combinedAddrKey}`);
 
         // 1. まず既存のUIDでの応募をチェック
         const existingEntryDoc = await getDoc(entryDocRef);
