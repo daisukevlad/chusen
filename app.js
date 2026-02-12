@@ -417,7 +417,11 @@ document.getElementById('entryForm').addEventListener('submit', async (e) => {
     const rawPhone = document.getElementById('phoneNumber').value.trim();
     const normalizedPhone = rawPhone.replace(/\D/g, ''); // 数字のみ
     const rawAddress = document.getElementById('address').value.trim();
-    const normalizedAddr = normalizeAddress(rawAddress);
+    const rawBuilding = document.getElementById('building').value.trim();
+
+    // 住所と建物名を合体させて重複チェック（マンションの別部屋を許可するため）
+    const fullAddress = rawAddress + (rawBuilding || '');
+    const normalizedAddr = normalizeAddress(fullAddress);
 
     const formData = {
         userId: currentUser.uid,
@@ -426,7 +430,7 @@ document.getElementById('entryForm').addEventListener('submit', async (e) => {
         phoneNumber: normalizedPhone,
         postalCode: document.getElementById('postalCode').value.trim(),
         address: rawAddress,
-        building: document.getElementById('building').value.trim(),
+        building: rawBuilding,
         createdAt: serverTimestamp(),
         isWinner: false
     };
