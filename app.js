@@ -391,7 +391,7 @@ function normalizeAddress(address) {
         .replace(/[０-９]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xfee0)) // 全角数字→半角
         .replace(/\s+/g, '') // 空白削除
         .replace(/[ー－―‐－]|\s/g, '-') // ハイフン類を統一
-        .replace(/[丁目|丁|番地|番|号]/g, '-') // 住所の代表的な区切りを統一
+        .replace(/(丁目|番地|丁|番|号|室)/g, '-') // 住所の区切りを一律ハイフンに（正規表現を修正）
         .replace(/-+/g, '-') // 連続するハイフンを一つに
         .replace(/-$/, '') // 末尾のハイフンを削除
         .toLowerCase();
@@ -419,9 +419,10 @@ document.getElementById('entryForm').addEventListener('submit', async (e) => {
     const rawAddress = document.getElementById('address').value.trim();
     const rawBuilding = document.getElementById('building').value.trim();
 
-    // 住所と建物名を合体させて重複チェック（マンションの別部屋を許可するため）
-    const fullAddress = rawAddress + (rawBuilding || '');
-    const normalizedAddr = normalizeAddress(fullAddress);
+    // 住所と建物名を別々に正規化して結合（マンションの別部屋を確実に区別するため）
+    const normalizedAddrPart = normalizeAddress(rawAddress);
+    const normalizedBldgPart = normalizeAddress(rawBuilding);
+    const combinedAddrKey = `${normalizedAddrPart}#${normalizedBldgPart}`;
 
     const formData = {
         userId: currentUser.uid,
@@ -441,7 +442,7 @@ document.getElementById('entryForm').addEventListener('submit', async (e) => {
 
         // 重複チェック用ドキュメントの参照
         const phoneRegRef = doc(db, 'campaigns', currentCampaign.id, 'registries', `phone_${normalizedPhone}`);
-        const addrRegRef = doc(db, 'campaigns', currentCampaign.id, 'registries', `addr_${normalizedAddr}`);
+        const addrRegRef = doc(db, 'campaigns', currentCampaign.id, 'registries', `addr_${combinedAddrKey}`);
 
         // 1. まず既存のUIDでの応募をチェック
         const existingEntryDoc = await getDoc(entryDocRef);
